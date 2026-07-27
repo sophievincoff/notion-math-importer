@@ -1,29 +1,56 @@
 # Notion Math Importer
 
-Import Markdown from ChatGPT into Notion while preserving native inline and
-display equations.
+<p align="center">
+  <img
+    src="images/notion-import-demo.png"
+    alt="Notion Math Importer demonstration"
+    width="850"
+  >
+</p>
 
-The importer creates a new child page beneath a Notion page you choose. It
-supports headings, paragraphs, emphasis, links, inline code, fenced code,
+Import Markdown and copied LLM responses into Notion while preserving native
+inline and display equations.
+
+The importer has two main modes:
+
+1. Create a new child page beneath a selected Notion page.
+2. Insert into an existing page, below a heading, or inside a toggle.
+
+It supports headings, paragraphs, emphasis, links, inline and fenced code,
 lists, quotes, dividers, inline math, and display math.
+
+These instructions are for macOS.
+
+# ⚙️ Setup
 
 ## 1. Create a Notion integration
 
 1. Open <https://www.notion.so/profile/integrations>.
-2. Create a new internal integration.
-3. Give it **Read content** and **Insert content** capabilities.
-4. Copy its internal integration token.
+2. Click **New connection**.
+3. Name it `LLM Math Importer`.
+4. Choose **Access token** as the authentication method.
+5. Give it **Read content** and **Insert content** capabilities.
+6. Copy the integration token.
 
-## 2. Share a destination page
+Keep this token private. Never commit it to Git.
 
-Open the Notion page that should contain your imported notes. Open its
-connections menu and connect the integration you created.
+## 2. Give the integration access to Notion
 
-The importer can only access pages explicitly shared with the integration.
+1. Open the Notion page that should contain your imports.
+2. Open the page menu (`•••`) and select **Connections**.
+3. Find `LLM Math Importer` and add it to the page.
+
+Access is inherited by child pages. Connecting a high-level home or notes page
+is therefore convenient when all intended destinations live beneath it.
+
+The integration cannot access unrelated pages merely linked from that hierarchy.
 
 ## 3. Install and configure
 
+Install Node.js 18 or newer, then clone this repository and run:
+
 ```bash
+cd notion-math-importer
 npm install
 cp .env.example .env
 ```
@@ -32,57 +59,125 @@ Edit `.env`:
 
 ```dotenv
 NOTION_TOKEN=secret_your_internal_integration_token
-NOTION_PARENT_PAGE_ID=https://www.notion.so/Your-Page-0123456789abcdef0123456789abcdef
+NOTION_PARENT_PAGE_ID=your_default_parent_page_id_or_url
 ```
 
-Keep `.env` private. It is excluded from Git.
+The `.env` file is excluded from Git.
 
-## 4. Import Markdown
+#### What does `NOTION_PARENT_PAGE_ID` mean?
 
-From a file:
+`NOTION_PARENT_PAGE_ID` is the **default parent for newly created child
+pages**. It is used only in Mode 1 below.
+
+For example, if it points to a page called `Research Notes`, every import made
+without an explicit `--parent` will create a new child page beneath `Research
+Notes`.
+
+It does not need to change for every import. Keep it set to the page you use
+most often. For a one-time different destination, pass `--parent`:
 
 ```bash
-npm run import -- --input example.md --title "Generator Matching Notes"
+pbpaste | npm run import -- \
+  --title "Different Destination" \
+  --parent "OTHER_NOTION_PAGE_LINK"
 ```
 
-Or from the clipboard on macOS:
+## 4. Dry run
 
-```bash
-pbpaste | npm run import -- --title "Imported ChatGPT Answer"
-```
-
-The command prints the URL of the newly created Notion page.
-
-To append clipboard contents directly to an existing toggle or other container,
-copy that block's link in Notion and run:
-
-```bash
-pbpaste | npm run import -- --target "NOTION_BLOCK_LINK"
-```
-
-With `--target`, no child page is created and `--title` is not needed.
-
-Test parsing and equations without contacting Notion:
+Test your install without writing to Notion.
 
 ```bash
 npm run import -- --input example.md --dry-run
 ```
 
-You can override the configured parent page:
+Expected output:
+
+```text
+Validated 10 blocks. Nothing was sent to Notion.
+```
+
+
+# 🔥 Usage
+
+## Mode 1: Create a new Notion page
+
+This mode creates a titled child page beneath `NOTION_PARENT_PAGE_ID`, or
+beneath the page supplied with `--parent`.
+
+### Import the clipboard
+
+Copy an LLM response and run:
+
+```bash
+pbpaste | npm run import -- --title "Generator Matching Notes"
+```
+
+### Import a Markdown file
+
+```bash
+npm run import -- \
+  --input example.md \
+  --title "Generator Matching Notes"
+```
+
+### Choose a different parent for one import
+
+In Notion, open the intended parent page and select **Copy link** from its page
+menu. Then run:
+
+```bash
+pbpaste | npm run import -- \
+  --title "Research Notes" \
+  --parent "PASTE_PARENT_PAGE_LINK_HERE"
+```
+
+The command prints the URL of the newly created page.
+
+## Mode 2: Insert into an existing Notion page
+
+This mode does not create a page and does not use
+`NOTION_PARENT_PAGE_ID`.
+
+You can choose among three destinations:
+
+- A **page**: append content at the bottom of that page.
+	- *Note*: Notion's API cannot see your current cursor position, so targeting a page
+always appends content to the bottom.
+- A **normal heading**: insert content immediately below that heading.
+- A **toggle or toggleable heading**: insert content inside it.
+
+
+### Get a page link
+
+Open the destination page and choose **Copy link** from its page menu.
+
+### Get a heading or toggle link
+
+1. Hover over the heading or toggle.
+2. Click the `⋮⋮` block handle to its left.
+3. Choose **Copy link to block**.
+
+### Import the clipboard
+
+```bash
+pbpaste | npm run import -- \
+  --target "PASTE_PAGE_HEADING_OR_TOGGLE_LINK_HERE"
+```
+
+### Import a Markdown file
 
 ```bash
 npm run import -- \
   --input notes.md \
-  --title "Research Notes" \
-  --parent "NOTION_PAGE_URL_OR_ID"
+  --target "PASTE_PAGE_HEADING_OR_TOGGLE_LINK_HERE"
 ```
 
-## Unpack a child page into a toggle
+No `--title` is needed because Mode 2 does not create a new page.
 
-In Notion, open the child page's menu and choose **Copy link**. Then open the
-toggle block's menu and choose **Copy link to block**.
+## Unpack an existing child page into a toggle
 
-Run:
+Copy the child page's link and the toggle's **Copy link to block** URL, then
+run:
 
 ```bash
 npm run unpack -- \
@@ -90,13 +185,10 @@ npm run unpack -- \
   --target "TOGGLE_BLOCK_LINK"
 ```
 
-The command recursively copies the child page's contents into the toggle. It
-leaves the original child page unchanged so you can verify the result before
+The source page is left unchanged so you can verify the copied content before
 deleting it manually.
 
-## Math formats
-
-All common ChatGPT math delimiters are accepted:
+## Supported math formats
 
 ```text
 $inline$
@@ -106,10 +198,16 @@ $$display$$
 ```
 
 Equations are validated with KaTeX before anything is written. If an equation
-is invalid, the import stops and reports the expression so it can be corrected.
+is invalid, the import stops and reports it.
 
 ## Safety
 
-- The tool creates a new child page; it does not rewrite existing page content.
-- The Notion token remains in your local `.env`.
-- No language model or third-party conversion service receives the notes.
+- `.env` and the Notion token remain local.
+- New-page imports do not rewrite existing pages.
+- Direct-target imports only append new blocks.
+- Unpack operations leave the source page unchanged.
+- No language model or third-party conversion service receives your notes.
+
+## ☑️ To-Dos
+
+- Ensure compatibility with Claude, Gemini, and other LLMs.

@@ -51,7 +51,7 @@ Options:
   --input, -i    Markdown file. If omitted, Markdown is read from stdin.
   --title, -t    Title of the new Notion page.
   --parent, -p   Parent Notion page ID or URL. Defaults to NOTION_PARENT_PAGE_ID.
-  --target       Append blocks directly to an existing Notion container.
+  --target       Insert into a page, below a heading, or inside a toggle.
   --dry-run      Parse and validate without creating a Notion page.
   --help, -h     Show this help.
 `);
@@ -386,13 +386,45 @@ async function appendInBatches(
   notion: Client,
   pageId: string,
   blocks: NotionBlock[],
+  afterBlockId?: string,
 ): Promise<void> {
+  let insertAfter = afterBlockId;
   for (let offset = 0; offset < blocks.length; offset += MAX_BLOCKS_PER_REQUEST) {
-    await notion.blocks.children.append({
+    const response = await notion.blocks.children.append({
       block_id: pageId,
       children: blocks.slice(offset, offset + MAX_BLOCKS_PER_REQUEST),
+      ...(insertAfter
+        ? {
+            position: {
+              type: "after_block" as const,
+              after_block: { id: insertAfter },
+            },
+          }
+        : {}),
     });
+    const lastBlock = response.results.at(-1);
+    if (lastBlock && "id" in lastBlock) insertAfter = lastBlock.id;
   }
+}
+
+function headingIsToggleable(block: Record<string, unknown>, type: string): boolean {
+  const payload = block[type];
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      "is_toggleable" in payload &&
+      payload.is_toggleable,
+  );
+}
+
+function parentBlockId(block: Record<string, unknown>): string {
+  const parent = block.parent;
+  if (!parent || typeof parent !== "object" || !("type" in parent)) {
+    throw new Error("Could not determine the heading's parent container.");
+  }
+  if (parent.type === "page_id" && "page_id" in parent) return String(parent.page_id);
+  if (parent.type === "block_id" && "block_id" in parent) return String(parent.block_id);
+  throw new Error("This heading's parent is not a writable page or block.");
 }
 
 async function main() {
@@ -421,8 +453,56 @@ async function main() {
       throw new Error("Use either --target or --parent, not both.");
     }
     const targetId = normalizePageId(args.target);
-    await appendInBatches(notion, targetId, blocks);
-    console.log(`Appended ${blocks.length} blocks directly to the target.`);
+    let target;
+    try {
+      target = await notion.blocks.retrieve({ block_id: targetId });
+    } catch (blockError) {
+      try {
+        await notion.pages.retrieve({ page_id: targetId });
+        await appendInBatches(notion, targetId, blocks);
+        console.log(`Appended ${blocks.length} blocks to the target page.`);
+        return;
+      } catch {
+        throw blockError;
+      }
+    }
+
+    if (!("type" in target)) {
+      throw new Error("Notion returned a partial target block.");
+    }
+
+    const targetRecord = target as unknown as Record<string, unknown>;
+    const isHeading = new Set([
+      "heading_1",
+      "heading_2",
+      "heading_3",
+      "heading_4",
+    ]).has(target.type);
+
+    if (
+      target.type === "child_page" ||
+      target.type === "toggle" ||
+      (isHeading && headingIsToggleable(targetRecord, target.type))
+    ) {
+      await appendInBatches(notion, targetId, blocks);
+      console.log(
+        target.type === "child_page"
+          ? `Appended ${blocks.length} blocks to the target page.`
+          : `Appended ${blocks.length} blocks inside the target.`,
+      );
+    } else if (isHeading) {
+      await appendInBatches(
+        notion,
+        parentBlockId(targetRecord),
+        blocks,
+        targetId,
+      );
+      console.log(`Inserted ${blocks.length} blocks below the target heading.`);
+    } else {
+      throw new Error(
+        `The --target link must point to a page, heading, or toggle; received "${target.type}".`,
+      );
+    }
     return;
   }
 
