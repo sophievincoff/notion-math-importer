@@ -1,0 +1,30 @@
+{
+  "name": "notion-math-importer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "import": "tsx src/import.ts",
+    "unpack": "tsx src/unpack.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.1.0",
+    "dotenv": "^17.2.0",
+    "katex": "^0.16.22",
+    "mdast-util-to-string": "^4.0.0",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}
