@@ -17,7 +17,7 @@ The importer has two main modes:
 2. Insert into an existing page, below a heading, or inside a toggle.
 
 It supports headings, paragraphs, emphasis, links, inline and fenced code,
-lists, quotes, dividers, inline math, and display math.
+lists, quotes, dividers, tables, inline math, and display math.
 
 These instructions are for macOS.
 
@@ -87,7 +87,7 @@ pbpaste | npm run import -- \
 Test your install without writing to Notion.
 
 ```bash
-npm run import -- --input example.md --dry-run
+npm run import -- --input examples/basic.md --dry-run
 ```
 
 Expected output:
@@ -116,7 +116,7 @@ pbpaste | npm run import -- --title "Generator Matching Notes"
 
 ```bash
 npm run import -- \
-  --input example.md \
+  --input examples/basic.md \
   --title "Generator Matching Notes"
 ```
 
@@ -132,6 +132,16 @@ pbpaste | npm run import -- \
 ```
 
 The command prints the URL of the newly created page.
+
+## Examples
+
+- [`examples/basic.md`](examples/basic.md) is a short sample for setup checks
+  and quick dry runs.
+- [`examples/kitchen-sink.md`](examples/kitchen-sink.md) exercises a broad mix
+  of Markdown features, including tables, code blocks, task lists, links, and
+  equations.
+- [`examples/kitchen-sink-prompt.md`](examples/kitchen-sink-prompt.md) records
+  the prompt used to generate the kitchen-sink response.
 
 ## Mode 2: Insert into an existing Notion page
 

@@ -24,6 +24,9 @@ import type {
   PhrasingContent,
   Root,
   Strong,
+  Table,
+  TableCell,
+  TableRow,
   Text,
   ThematicBreak,
 } from "mdast";
@@ -31,6 +34,7 @@ import { readFile } from "node:fs/promises";
 import process from "node:process";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
 import { unified } from "unified";
 
 type InlineMath = PhrasingContent & { type: "inlineMath"; value: string };
@@ -333,6 +337,36 @@ function listItemBlock(node: ListItem, ordered: boolean): NotionBlock {
   };
 }
 
+function tableCellRichText(cell: TableCell): NotionRichText[] {
+  return inlineToRichText(cell.children);
+}
+
+function tableRowBlock(row: TableRow, width: number): NotionBlock {
+  const cells = row.children.map(tableCellRichText);
+  while (cells.length < width) cells.push([]);
+
+  return {
+    object: "block",
+    type: "table_row",
+    table_row: { cells },
+  };
+}
+
+function tableBlock(node: Table): NotionBlock {
+  const width = Math.max(1, ...node.children.map((row) => row.children.length));
+
+  return {
+    object: "block",
+    type: "table",
+    table: {
+      table_width: width,
+      has_column_header: node.children.length > 0,
+      has_row_header: false,
+      children: node.children.map((row) => tableRowBlock(row, width)) as never,
+    },
+  };
+}
+
 function contentToBlocks(node: Content): NotionBlock[] {
   switch (node.type) {
     case "paragraph":
@@ -367,6 +401,8 @@ function contentToBlocks(node: Content): NotionBlock[] {
       const list = node as List;
       return list.children.map((item) => listItemBlock(item, Boolean(list.ordered)));
     }
+    case "table":
+      return [tableBlock(node as Table)];
     case "html":
       return [{
         object: "block",
@@ -436,7 +472,11 @@ async function main() {
     : await readStdin();
 
   const normalized = normalizeChatMath(markdown);
-  const tree = unified().use(remarkParse).use(remarkMath).parse(normalized) as Root;
+  const tree = unified()
+    .use(remarkParse)
+    .use(remarkMath)
+    .use(remarkGfm)
+    .parse(normalized) as Root;
   const blocks = documentToBlocks(tree);
 
   if (args.dryRun) {
