@@ -9,6 +9,7 @@
   "scripts": {
     "import": "tsx src/import.ts",
     "unpack": "tsx src/unpack.ts",
+    "reformat": "tsx src/reformat.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {

@@ -11,10 +11,11 @@
 Import Markdown and copied LLM responses into Notion while preserving native
 inline and display equations.
 
-The importer has two main modes:
+The importer has three main modes:
 
 1. Create a new child page beneath a selected Notion page.
 2. Insert into an existing page, below a heading, or inside a toggle.
+3. Reformat plain-text math already on a page, heading section, or toggle.
 
 It supports headings, paragraphs, emphasis, links, inline and fenced code,
 lists, quotes, dividers, tables, inline math, and display math.
@@ -29,7 +30,9 @@ These instructions are for macOS.
 2. Click **New connection**.
 3. Name it `LLM Math Importer`.
 4. Choose **Access token** as the authentication method.
-5. Give it **Read content** and **Insert content** capabilities.
+5. Give it **Read content**, **Insert content**, and **Update content**
+   capabilities. Update is required for the reformat command (and for deleting
+   paragraphs that are upgraded into display equation blocks).
 6. Copy the integration token.
 
 Keep this token private. Never commit it to Git.
@@ -198,6 +201,33 @@ npm run unpack -- \
 The source page is left unchanged so you can verify the copied content before
 deleting it manually.
 
+## Mode 3: Reformat existing math
+
+Use this when a page (or section) already contains equations as plain text
+like `$x^2$` or `\[E=mc^2\]` instead of native Notion equations.
+
+Copy a page link, or **Copy link to block** for a heading or toggle, then run:
+
+```bash
+npm run reformat -- --target "PASTE_PAGE_HEADING_OR_TOGGLE_LINK_HERE"
+```
+
+Preview without writing:
+
+```bash
+npm run reformat -- --target "PASTE_PAGE_HEADING_OR_TOGGLE_LINK_HERE" --dry-run
+```
+
+Scope by target:
+
+- A **page**: every descendant block.
+- A **toggle or toggleable heading**: that block’s own text, then everything inside it.
+- A **normal heading**: the heading itself plus following blocks until the next
+  heading of the same or higher level.
+
+Only math delimiters are rewritten. Code blocks are left alone. Invalid KaTeX
+expressions stay as plain text and are reported as warnings.
+
 ## Supported math formats
 
 ```text
@@ -207,8 +237,11 @@ $$display$$
 \[display\]
 ```
 
-Equations are validated with KaTeX before anything is written. If an equation
-is invalid, the import stops and reports it.
+On import, equations are validated with KaTeX before anything is written. If an
+equation is invalid, the import stops and reports it.
+
+On reformat, invalid expressions are skipped so the rest of the page can still
+be fixed.
 
 ## Safety
 
@@ -216,6 +249,8 @@ is invalid, the import stops and reports it.
 - New-page imports do not rewrite existing pages.
 - Direct-target imports only append new blocks.
 - Unpack operations leave the source page unchanged.
+- Reformat only rewrites math delimiters into Notion equations (and may replace
+  pure display-math paragraphs with equation blocks).
 - No language model or third-party conversion service receives your notes.
 
 ## ☑️ To-Dos

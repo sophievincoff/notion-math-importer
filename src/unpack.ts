@@ -1,13 +1,14 @@
 import "dotenv/config";
 
 import { Client } from "@notionhq/client";
-import type {
-  BlockObjectRequest,
-  ListBlockChildrenResponse,
-} from "@notionhq/client/build/src/api-endpoints.js";
+import type { BlockObjectRequest } from "@notionhq/client/build/src/api-endpoints.js";
 import process from "node:process";
 
-type SourceBlock = ListBlockChildrenResponse["results"][number];
+import {
+  normalizeNotionId,
+  retrieveAllChildren,
+  type SourceBlock,
+} from "./notion-utils.js";
 
 function usage(): never {
   console.error(`
@@ -47,47 +48,6 @@ function parseArgs(argv: string[]) {
 
   if (!result.source || !result.target) usage();
   return result as { source: string; target: string };
-}
-
-function normalizeNotionId(input: string): string {
-  const matches = input.match(
-    /[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}/g,
-  );
-  const compact = (matches?.at(-1) ?? input).replaceAll("-", "");
-
-  if (!/^[0-9a-fA-F]{32}$/.test(compact)) {
-    throw new Error(
-      "Expected a Notion page/block URL or a 32-character Notion ID.",
-    );
-  }
-
-  return [
-    compact.slice(0, 8),
-    compact.slice(8, 12),
-    compact.slice(12, 16),
-    compact.slice(16, 20),
-    compact.slice(20),
-  ].join("-");
-}
-
-async function retrieveAllChildren(
-  notion: Client,
-  blockId: string,
-): Promise<SourceBlock[]> {
-  const blocks: SourceBlock[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const response = await notion.blocks.children.list({
-      block_id: blockId,
-      page_size: 100,
-      ...(cursor ? { start_cursor: cursor } : {}),
-    });
-    blocks.push(...response.results);
-    cursor = response.has_more ? (response.next_cursor ?? undefined) : undefined;
-  } while (cursor);
-
-  return blocks;
 }
 
 const READ_ONLY_KEYS = new Set([

@@ -1,7 +1,6 @@
 import "dotenv/config";
 
 import { Client } from "@notionhq/client";
-import katex from "katex";
 import type {
   BlockObjectRequest,
   CreatePageParameters,
@@ -36,6 +35,14 @@ import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { unified } from "unified";
+
+import {
+  HEADING_TYPES,
+  headingIsToggleable,
+  normalizeNotionId,
+  parentBlockId,
+  validateEquation,
+} from "./notion-utils.js";
 
 type InlineMath = PhrasingContent & { type: "inlineMath"; value: string };
 type MathNode = Content & { type: "math"; value: string };
@@ -109,25 +116,6 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function normalizePageId(input: string): string {
-  const matches = input.match(
-    /[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}/g,
-  );
-  const compact = (matches?.at(-1) ?? input).replaceAll("-", "");
-
-  if (!/^[0-9a-fA-F]{32}$/.test(compact)) {
-    throw new Error("The parent must be a Notion page URL or a 32-character page ID.");
-  }
-
-  return [
-    compact.slice(0, 8),
-    compact.slice(8, 12),
-    compact.slice(12, 16),
-    compact.slice(16, 20),
-    compact.slice(20),
-  ].join("-");
-}
-
 function normalizeChatMath(markdown: string): string {
   // remark-math understands $...$ and $$...$$. Chat responses often use
   // \(...\) and \[...\], so normalize those forms outside fenced code.
@@ -144,20 +132,6 @@ function normalizeChatMath(markdown: string): string {
         );
     })
     .join("");
-}
-
-function validateEquation(expression: string): string {
-  try {
-    katex.renderToString(expression, {
-      throwOnError: true,
-      strict: "warn",
-      output: "html",
-    });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid KaTeX expression:\n${expression}\n\n${detail}`);
-  }
-  return expression;
 }
 
 function annotations(overrides: Partial<NonNullable<NotionRichText["annotations"]>> = {}) {
@@ -443,26 +417,6 @@ async function appendInBatches(
   }
 }
 
-function headingIsToggleable(block: Record<string, unknown>, type: string): boolean {
-  const payload = block[type];
-  return Boolean(
-    payload &&
-      typeof payload === "object" &&
-      "is_toggleable" in payload &&
-      payload.is_toggleable,
-  );
-}
-
-function parentBlockId(block: Record<string, unknown>): string {
-  const parent = block.parent;
-  if (!parent || typeof parent !== "object" || !("type" in parent)) {
-    throw new Error("Could not determine the heading's parent container.");
-  }
-  if (parent.type === "page_id" && "page_id" in parent) return String(parent.page_id);
-  if (parent.type === "block_id" && "block_id" in parent) return String(parent.block_id);
-  throw new Error("This heading's parent is not a writable page or block.");
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const title = args.title ?? "Imported ChatGPT notes";
@@ -492,7 +446,7 @@ async function main() {
     if (args.parent) {
       throw new Error("Use either --target or --parent, not both.");
     }
-    const targetId = normalizePageId(args.target);
+    const targetId = normalizeNotionId(args.target);
     let target;
     try {
       target = await notion.blocks.retrieve({ block_id: targetId });
@@ -512,12 +466,7 @@ async function main() {
     }
 
     const targetRecord = target as unknown as Record<string, unknown>;
-    const isHeading = new Set([
-      "heading_1",
-      "heading_2",
-      "heading_3",
-      "heading_4",
-    ]).has(target.type);
+    const isHeading = HEADING_TYPES.has(target.type);
 
     if (
       target.type === "child_page" ||
@@ -553,7 +502,7 @@ async function main() {
     );
   }
 
-  const parentPageId = normalizePageId(parentInput);
+  const parentPageId = normalizeNotionId(parentInput);
 
   const pageRequest: CreatePageParameters = {
     parent: { type: "page_id", page_id: parentPageId },
